@@ -86,6 +86,24 @@ Usar exactamente la orden del paso 5 y la semilla por defecto (0): la cantidad m
 - `salidas_16g/16g_10_base_por_grupo.csv` muestra el resultado de cada grupo por separado.
 - `salidas_16g/16g_12_ficha_modelo.txt` resume la configuración del modelo final y copia ese desempeño validado.
 
+### Comprobar que todo salió bien
+
+**1. Ver que se cumple el criterio.** Muestra, por canal y cantidad de sintéticos, las veces sobre el azar y si se cumple:
+
+```
+python -c "import pandas as pd; d=pd.read_csv('salidas_16g/16g_10_base_resultados.csv'); print(d[['objetivo','canal','x_azar','cumple_global']])"
+```
+
+Debe mostrar `cumple_global = True` en cuerpo y cara con objetivo 3000 y 5000 (cuerpo cerca de 2,01 y 2,09; cara cerca de 6,26 y 5,93). La fila `-1` es el caso sin datos sintéticos.
+
+**2. Abrir el modelo guardado.** Muestra su configuración, las acciones que reconoce y el número de características (178):
+
+```
+python -c "import joblib; M=joblib.load('salidas_16g/16g_12_modelo_final.joblib'); print(M['configuracion']); print(list(M['modelo'].classes_)); print(len(M['caracteristicas']), 'caracteristicas')"
+```
+
+El criterio se verifica con la primera orden y no con el modelo guardado: el modelo final ya vio los 16 grupos y no tiene un conjunto de prueba propio.
+
 ### Sobre el modelo final
 
 El modelo guardado se entrena con los 16 grupos, así que **no tiene un conjunto de prueba propio**. El desempeño que se le atribuye es el de la validación con un grupo fuera (paso 5). El puntaje que el script calcula sobre esos mismos 16 grupos sale muy alto y no es una evaluación. Un mismo modelo sirve a los dos canales: el puntaje del par se contrasta con la anotación corporal o facial.
