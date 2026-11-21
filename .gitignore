@@ -221,3 +221,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Datos y resultados del proyecto (no se suben)
+Root/
+salidas/
+salidas_16g/
+*.parquet
+*.joblib
