@@ -224,7 +224,9 @@ __marimo__/
 
 # Datos y resultados del proyecto (no se suben)
 Root/
-salidas/
-salidas_16g/
+salidas*/
 *.parquet
 *.joblib
+*.npz
+*.npy
+*.json

@@ -15,7 +15,7 @@ Root/
     Grupo02/A   Grupo02/B   ...
 ```
 
-Tampoco se incluyen las salidas pesadas (`.npz`, `.parquet`). Sin el conjunto de datos, los scripts no se pueden ejecutar; las tablas de la carpeta `resultados/` permiten revisar lo que se obtuvo.
+Tampoco se incluyen los resultados: las salidas se generan al ejecutar los scripts. Sin el conjunto de datos, los scripts no se pueden ejecutar.
 
 ## Contenido
 
@@ -27,8 +27,6 @@ Tampoco se incluyen las salidas pesadas (`.npz`, `.parquet`). Sin el conjunto de
 | `tp_sensibilidad_resumen.py` | Reúne los resultados del análisis de sensibilidad |
 | `*.bat` | Atajos para Windows con los comandos de cada paso |
 | `DECISIONES_cara.md`, `DECISIONES_cuerpo.md` | Registro de decisiones con alternativa y justificación |
-| `resultados/` | Salidas livianas de la última prueba (tablas y registros de texto) |
-| `etapa_previa/` | Scripts de la etapa anterior (`16g_*`, `util16g.py`), solo como registro |
 
 ## 1. Instalar los requisitos
 
