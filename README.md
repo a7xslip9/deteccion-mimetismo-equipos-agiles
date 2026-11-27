@@ -1,135 +1,166 @@
-# deteccion-mimetismo-equipos-agiles
+# Detección de mimetismo corporal y facial en equipos ágiles
 
-Scripts para entrenar y validar un modelo de detección de mimetismo corporal y facial en equipos ágiles, a partir de los keypoints del conjunto de datos multimodal de la Universidad de Valparaíso. Proyecto de título, Ingeniería Civil Informática.
+Código de la etapa actual del trabajo de título (Universidad de Valparaíso, Ingeniería Civil Informática). Detecta mimetismo entre pares de personas a partir de las series de puntos clave del conjunto de datos multimodal de equipos ágiles, y lo evalúa contra las anotaciones humanas dejando un grupo fuera. Compara tres modelos: Random Forest (referencia), MiniRocket y Transformer, además de dos bases sin aprendizaje (energía y sincronía).
 
-## Qué hace
+Las decisiones de cada script están en `DECISIONES_cara.md` (D-xx) y `DECISIONES_cuerpo.md` (B-xx).
 
-Dado el conjunto de datos de equipos ágiles (19 grupos de cuatro estudiantes, 16 con mimetismo anotado), el código:
+## Importante: el conjunto de datos no está en este repositorio
 
-1. Limpia y alinea las series de puntos clave (pose, manos, cara) y las divide en segmentos de 2 segundos.
-2. Reconoce la acción de cada persona en cada segmento (etapa 1, *Random Forest*).
-3. Puntúa cada par de personas por la probabilidad de que hagan la misma acción a la vez (etapa 2, sin entrenamiento).
-4. Valida con la técnica **un grupo fuera** (se entrena con 15 grupos y se prueba con el restante, 16 veces).
-5. Agrega datos sintéticos de acciones corporales al entrenamiento, y guarda un modelo final entrenado con los 16 grupos.
+Los scripts necesitan el conjunto de datos multimodal de equipos ágiles de la Universidad de Valparaíso, creado por Diego Miranda. Ese conjunto no se puede publicar aquí, por lo que no se incluye. Debe solicitarse a su autor y guardarse en una carpeta llamada `Root` con esta forma:
 
-**Criterio de éxito:** PR-AUC al menos 2 veces la prevalencia (el azar), con el límite inferior del intervalo de confianza de 95 % sobre la prevalencia.
+```
+Root/
+    mimicry_indicators.xlsx
+    Grupo01/A   Grupo01/B
+    Grupo02/A   Grupo02/B   ...
+```
 
-## Resultado esperado
+Tampoco se incluyen las salidas pesadas (`.npz`, `.parquet`). Sin el conjunto de datos, los scripts no se pueden ejecutar; las tablas de la carpeta `resultados/` permiten revisar lo que se obtuvo.
 
-| Canal | Sin sintéticos | Con 3.000 sintéticos por acción | Criterio |
-|---|---|---|---|
-| Cuerpo | 1,68 veces el azar | **2,01** (2,00 en una repetición con otra semilla) | cumple, por un margen mínimo |
-| Cara | 6,80 veces el azar | **6,26** | cumple |
+## Contenido
 
-Con 5.000 sintéticos por acción el cuerpo llega a 2,09 y la cara baja a 5,93. Los datos sintéticos mejoran el cuerpo pero empeoran algo la cara, y el resultado del cuerpo es optimista porque la cantidad se eligió mirando los mismos grupos de prueba. El detalle está en el informe del proyecto.
+| Carpeta o archivo | Qué contiene |
+|---|---|
+| `tp_util.py` | Rutas, argumentos y funciones comunes |
+| `tp_cara_01` a `tp_cara_05` (incluye `03b`) | Serie del canal facial (etiqueta `face_mimicry`) |
+| `tp_cuerpo_01` a `tp_cuerpo_05` (incluye `03b`) | Serie del canal corporal (etiqueta `body_mimicry`) |
+| `tp_sensibilidad_resumen.py` | Reúne los resultados del análisis de sensibilidad |
+| `*.bat` | Atajos para Windows con los comandos de cada paso |
+| `DECISIONES_cara.md`, `DECISIONES_cuerpo.md` | Registro de decisiones con alternativa y justificación |
+| `resultados/` | Salidas livianas de la última prueba (tablas y registros de texto) |
+| `etapa_previa/` | Scripts de la etapa anterior (`16g_*`, `util16g.py`), solo como registro |
 
-## Dónde dejar cada cosa
+## 1. Instalar los requisitos
 
-El conjunto de datos **no está en este repositorio**: debe descargarse desde su fuente original (Miranda et al., 2025). Se guarda en una carpeta llamada `Root`, **al lado de los scripts**, dentro de una misma carpeta de trabajo:
+Se necesita Python 3 (probado con 3.13) y estas bibliotecas: numpy, pandas, pyarrow, openpyxl, scipy, scikit-learn, matplotlib, aeon (MiniRocket) y torch (Transformer).
+
+Instalar:
+
+```
+pip install numpy pandas pyarrow openpyxl scipy scikit-learn matplotlib aeon torch
+```
+
+Actualizar a las últimas versiones:
+
+```
+pip install --upgrade numpy pandas pyarrow openpyxl scipy scikit-learn matplotlib aeon torch
+```
+
+Para usar la GPU, `torch` debe instalarse con CUDA siguiendo las instrucciones de https://pytorch.org (el comando depende de la versión de CUDA). Sin GPU el Transformer funciona en CPU, pero muy lento. Para comprobar que se detecta la GPU:
+
+```
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
+Para ver las versiones instaladas: `pip list`.
+
+## 2. Preparar la carpeta de trabajo
+
+Los scripts y la carpeta `Root` van lado a lado:
 
 ```
 carpeta_de_trabajo/
-│
-├── Root/                          <- el conjunto de datos descargado
-│   ├── mimicry_indicators.xlsx
-│   ├── Grupo01/
-│   │   ├── A/
-│   │   └── B/
-│   ├── Grupo02/
-│   │   ├── A/
-│   │   └── B/
-│   └── ...                        (hasta Grupo21)
-│
-├── 16g_00_comprobar_datos.py      <- los scripts de este repositorio
-├── 16g_01_preparar_series.py
-├── ...
-├── 16g_12_modelo_final.py
-├── util16g.py
-│
-└── salidas_16g/                   <- se crea sola al ejecutar; aquí quedan los resultados
+    Root/                       (el conjunto de datos)
+    tp_util.py
+    tp_cara_01_entender_datos.py  ...  tp_cuerpo_05_evaluar.py
+    tp_sensibilidad_resumen.py
+    *.bat
 ```
 
-Si el conjunto de datos está en otro lugar, se indica con `--root RUTA` y `--anot RUTA\mimicry_indicators.xlsx` en cada comando.
-
-## Requisitos
-
-Python 3 y estas bibliotecas (probado con Python 3.13, numpy 2.5.5, pandas 3.1.1, pyarrow 26.0.1, scikit-learn 1.9.1, matplotlib 3.11.2, en Windows 11 con 12 procesadores lógicos):
+Todos los comandos se ejecutan desde esa carpeta:
 
 ```
-pip install pandas pyarrow openpyxl numpy scikit-learn matplotlib joblib
+cd ruta\a\carpeta_de_trabajo
 ```
 
-## Paso a paso
+Si `Root` está en otro lugar, se agrega a cada comando `--root RUTA --anot RUTA\mimicry_indicators.xlsx`. Los resultados quedan en `salidas_tp\` (cara) y `salidas_tp_cuerpo\` (cuerpo).
 
-1. Descargar el repositorio (botón verde *Code* > *Download ZIP*, o `git clone`) y descomprimirlo en la `carpeta_de_trabajo`.
-2. Descargar el conjunto de datos y dejarlo como `Root`, al lado de los scripts (ver el esquema de arriba).
-3. Abrir la consola (*cmd*) **en la carpeta donde están los scripts**: en el Explorador de archivos, escribir `cmd` en la barra de direcciones y presionar Enter, o usar `cd ruta\a\carpeta_de_trabajo`.
-4. Ejecutar los comandos de la siguiente sección, **en este orden** (cada script usa las salidas del anterior).
+Cada script retoma donde quedó si se interrumpe: se vuelve a ejecutar el mismo comando. `--rehacer` fuerza todo.
 
-### Camino directo al modelo final
+## 3. Preparar los datos (una terminal, en orden)
 
-| Paso | Comando | Qué hace | Dónde ver el resultado |
-|---|---|---|---|
-| 1 | `python 16g_00_comprobar_datos.py` | Comprueba que estén las 32 sesiones y sus archivos | `salidas_16g/16g_00_comprobar_datos.txt` |
-| 2 | `python 16g_01_preparar_series.py` | Limpia y alinea las series de puntos clave | `salidas_16g/16g_01_series_<sesión>.parquet` |
-| 3 | `python 16g_02_construir_casos.py` | Arma los casos segmento-par-canal con su etiqueta | `salidas_16g/16g_02_casos.parquet` |
-| 4 | `python 16g_05_dos_etapas_logo.py` | Características por persona y caso base sin sintéticos | `salidas_16g/16g_05_resultados.csv`; el caso base (cuerpo 1,68 y cara 6,80 veces el azar) se ve también como fila `-1` en el paso 5 |
-| 5 | `python 16g_10_representacion_fina.py --rep base --objetivos 3000 5000 --max-por-ejemplo 40` | Genera los datos sintéticos y valida con un grupo fuera | `salidas_16g/16g_10_base_resultados.csv`: filas con objetivo 3000 y 5000, columna `cumple_global` en `True` para el cuerpo |
-| 6 | `python 16g_12_modelo_final.py` | Entrena el modelo final con los 16 grupos y lo guarda | `salidas_16g/16g_12_modelo_final.joblib` y `16g_12_ficha_modelo.txt` |
-| 7 | `python 16g_12_modelo_final.py --modo puntuar --grupos 01 15` | Puntúa los pares de los grupos indicados con el modelo guardado | `16g_12_candidatos_puntuar.csv` (segmentos-par con mayor puntaje) |
-
-Usar exactamente la orden del paso 5 y la semilla por defecto (0): la cantidad máxima de la reserva de sintéticos cambia las variantes generadas, y con otra orden el resultado varía levemente.
-
-### Cómo comprobar que se cumple el umbral
-
-- Abrir `salidas_16g/16g_10_base_resultados.csv`. Las filas con `objetivo` 3000 y 5000 deben mostrar `cumple_global = True` en el canal `cuerpo` (columna `x_azar` cerca de 2,01 y 2,09) y en el canal `cara` (cerca de 6,26 y 5,93). La fila `-1` es el caso sin sintéticos.
-- `salidas_16g/16g_10_base_por_grupo.csv` muestra el resultado de cada grupo por separado.
-- `salidas_16g/16g_12_ficha_modelo.txt` resume la configuración del modelo final y copia ese desempeño validado.
-
-### Comprobar que todo salió bien
-
-**1. Ver que se cumple el criterio.** Muestra, por canal y cantidad de sintéticos, las veces sobre el azar y si se cumple:
+Canal corporal (se hace primero, porque la etiqueta facial también se predice con series del cuerpo):
 
 ```
-python -c "import pandas as pd; d=pd.read_csv('salidas_16g/16g_10_base_resultados.csv'); print(d[['objetivo','canal','x_azar','cumple_global']])"
+python tp_cuerpo_01_entender_datos.py
+python tp_cuerpo_02_preparar_series.py
+python tp_cuerpo_03_construir_casos.py
+python tp_cuerpo_03b_seleccionar_puntos.py
 ```
 
-Debe mostrar `cumple_global = True` en cuerpo y cara con objetivo 3000 y 5000 (cuerpo cerca de 2,01 y 2,09; cara cerca de 6,26 y 5,93). La fila `-1` es el caso sin datos sintéticos.
-
-**2. Abrir el modelo guardado.** Muestra su configuración, las acciones que reconoce y el número de características (178):
+Canal facial:
 
 ```
-python -c "import joblib; M=joblib.load('salidas_16g/16g_12_modelo_final.joblib'); print(M['configuracion']); print(list(M['modelo'].classes_)); print(len(M['caracteristicas']), 'caracteristicas')"
+python tp_cara_01_entender_datos.py
+python tp_cara_02_preparar_series.py
+python tp_cara_03_construir_casos.py
+python tp_cara_03b_seleccionar_puntos.py
 ```
 
-El criterio se verifica con la primera orden y no con el modelo guardado: el modelo final ya vio los 16 grupos y no tiene un conjunto de prueba propio.
+Atajos: `tp_cuerpo_preparacion.bat` y `tp_cara_preparacion.bat`. El `03b` elige los puntos sin usar etiquetas y deja `tp_*_03b_puntos.csv` con la decisión y el motivo de cada punto.
 
-### Sobre el modelo final
+## 4. Prueba rápida (recomendada)
 
-El modelo guardado se entrena con los 16 grupos, así que **no tiene un conjunto de prueba propio**. El desempeño que se le atribuye es el de la validación con un grupo fuera (paso 5). El puntaje que el script calcula sobre esos mismos 16 grupos sale muy alto y no es una evaluación. Un mismo modelo sirve a los dos canales: el puntaje del par se contrasta con la anotación corporal o facial.
+Con pocos grupos, filtros y épocas. Termina en unos minutos y confirma que los tres modelos funcionan. Sus resultados quedan aparte y se pueden borrar.
 
-## Reproducir el resto de los resultados del informe
+```
+python tp_cara_04_modelar.py --rep todos --modelos energia sincronia rf minirocket transformer --rapido
+```
 
-Siempre después de los pasos 1 a 4:
+## 5. Entrenar y comparar los modelos
 
-| Comando | Resultado que reproduce |
+Cada comando entrena con un grupo fuera (16 pruebas) y guarda los resultados por modelo y representación. Las representaciones son `seleccion` (puntos elegidos sin etiquetas), `todos` y `descriptores`. Los modelos son `energia` y `sincronia` (bases sin aprendizaje), `rf` (Random Forest), `minirocket` y `transformer`.
+
+Modelos de CPU (Random Forest, MiniRocket y bases), una terminal:
+
+```
+python tp_cuerpo_04_modelar.py --rep seleccion --modelos energia sincronia rf minirocket
+python tp_cara_04_modelar.py --rep seleccion --modelos energia sincronia rf minirocket
+```
+
+Transformer (GPU), otra terminal:
+
+```
+python tp_cuerpo_04_modelar.py --rep seleccion --modelos transformer
+python tp_cara_04_modelar.py --rep seleccion --modelos transformer
+```
+
+Para repetir con todas las representaciones, se usan los atajos: `tp_cuerpo_noche_A.bat` y `tp_cara_noche_A.bat` (CPU), y `tp_cuerpo_noche_B.bat` y `tp_cara_noche_B.bat` (GPU). Se recomienda correr a lo más tres procesos a la vez por la memoria.
+
+Etiqueta facial con información del cuerpo (representaciones `cuerpo` y `cara_cuerpo`): `tp_extra_A_gpu.bat` (GPU), `tp_extra_B_cpu.bat` y `tp_extra_C_cpu.bat` (CPU; incluyen la sensibilidad).
+
+Tiempos aproximados (Intel Core i5-12450HX, 16 GB, RTX 3050): el Transformer tarda unos 40 s por grupo de prueba (cerca de 30 minutos por configuración con tres semillas); Random Forest, de 23 s por grupo con el cuerpo a 150 s con cara y cuerpo.
+
+## 6. Evaluar y comparar Random Forest, MiniRocket y Transformer
+
+```
+python tp_cuerpo_05_evaluar.py --rep_ref seleccion
+python tp_cara_05_evaluar.py --rep_ref seleccion
+python tp_sensibilidad_resumen.py --canal cuerpo
+python tp_sensibilidad_resumen.py --canal cara
+```
+
+La evaluación genera, en cada carpeta de salida:
+
+| Archivo | Para qué sirve |
 |---|---|
-| `python 16g_03_medidas_sincronia.py` y luego `python 16g_04_modelos_clasicos_logo.py` | Medidas clásicas de sincronía y modelos clásicos (no cumplen el criterio) |
-| `python 16g_06_resumen_y_figuras.py` | Resumen global y por grupo, y las figuras |
-| `python 16g_07_diagnostico_actividad.py` y luego `python 16g_08_diagnostico_etapa1.py` | Diagnósticos de la regla de la misma acción y del reconocimiento de acciones |
-| `python 16g_09_datos_sinteticos_cuerpo.py` | Sintéticos con 500, 1.000 y 2.000 ejemplos por acción |
-| `python 16g_10_representacion_fina.py --rep fina --objetivos 0 1000 2000` | Características finas de las manos, sin y con sintéticos |
-| `python 16g_10_representacion_fina.py --rep base --objetivos 3000 --semilla 1` | Repetición de la configuración final con otra semilla (2,00 veces el azar) |
-| `python 16g_11_comparacion_pareada.py` | Comparación pareada de cada variante con el caso base |
+| `tp_*_05_evaluar.txt` | Resumen completo: si cada modelo supera el azar, comparaciones pareadas y skill por grupo |
+| `tp_*_05_resumen_modelos.csv` | Una fila por modelo y representación (PR-AUC, skill, intervalo, valor p) |
+| `tp_*_05_comparaciones.csv` | Diferencia de skill entre dos configuraciones, con su intervalo |
+| `tp_*_05_por_grupo.csv` | Skill de cada modelo en cada grupo de prueba |
+| `tp_*_05_skill_por_grupo.png` | Figura del skill por grupo |
+| `tp_*_sensibilidad.txt` y `.csv` | Análisis de sensibilidad |
 
-Para una prueba rápida con dos grupos, agregar `--grupos 01 15` a los scripts 00 a 03.
+Para comparar los modelos entre sí, en `tp_*_05_evaluar.txt` se mira:
 
-## Límites
+1. La sección 1 (una fila por modelo): columna `skill_prom` y su intervalo (`skill_ic_inf`, `skill_ic_sup`). Un modelo supera el azar si `supera_azar` es `True`.
+2. La sección 2 (comparaciones pareadas): filas como "transformer contra la referencia rf" o "transformer contra minirocket". Una diferencia está respaldada si el intervalo (`ic_inf`, `ic_sup`) no incluye 0 y `p_holm` es menor que 0,05.
+3. La sección 3: el skill de cada modelo por grupo, para ver si el resultado depende de pocos grupos.
 
-- Los resultados corresponden a 16 grupos de estudiantes de una universidad, en laboratorio; no se extienden a otros equipos ni tareas.
-- El mimetismo "facial" detectado es en buena parte reconocimiento de acciones (mano en la boca, apoyarse hacia atrás), porque el canal en que se anota el mimetismo depende del tipo de acción.
-- Para puntuar sesiones nuevas deben calcularse antes sus características (pasos 1 a 4).
+`skill` vale 0 para el azar y 1 para un puntaje perfecto. `x_azar_prom` (PR-AUC sobre prevalencia) es solo referencial.
 
-## Cita del conjunto de datos
+## Si algo falla
 
-Miranda et al. (2025). Conjunto de datos multimodal de equipos ágiles de la Universidad de Valparaíso (*Data in Brief*).
+- Falta de memoria: agregar `--lote_ventanas 500` y, para MiniRocket, `--kernels 5000` (sin mezclar con resultados de 10.000 filtros en la misma carpeta).
+- El Transformer informa "CPU (lento)": `torch` no detectó la GPU; revisar la instalación con CUDA.
+- Una sesión falla en el script 02: el resumen la lista; se corrige y se vuelve a ejecutar.
